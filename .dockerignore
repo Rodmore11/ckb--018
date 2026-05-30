@@ -1,0 +1,9 @@
+README.md
+ckb.toml
+ckb-miner.toml
+target/
+data/
+specs/
+docs/
+docker/
+!docker/docker-entrypoint.sh
