@@ -1,0 +1,116 @@
+use crate::synchronizer::Synchronizer;
+use crate::utils::{async_send_message, async_send_message_to};
+use crate::{Status, StatusCode};
+use ckb_constant::sync::MAX_LOCATOR_SIZE;
+use ckb_logger::{debug, info};
+use ckb_network::{CKBProtocolContext, PeerIndex, SupportProtocols};
+use ckb_types::{
+    core,
+    packed::{self, Byte32},
+    prelude::*,
+};
+use std::sync::Arc;
+
+pub struct GetHeadersProcess<'a> {
+    message: packed::GetHeadersReader<'a>,
+    synchronizer: &'a Synchronizer,
+    peer: PeerIndex,
+    nc: &'a Arc<dyn CKBProtocolContext + Sync>,
+}
+
+impl<'a> GetHeadersProcess<'a> {
+    pub fn new(
+        message: packed::GetHeadersReader<'a>,
+        synchronizer: &'a Synchronizer,
+        peer: PeerIndex,
+        nc: &'a Arc<dyn CKBProtocolContext + Sync>,
+    ) -> Self {
+        GetHeadersProcess {
+            message,
+            nc,
+            synchronizer,
+            peer,
+        }
+    }
+
+    pub fn execute(self) -> Status {
+        let active_chain = self.synchronizer.shared.active_chain();
+
+        let block_locator_hashes = self
+            .message
+            .block_locator_hashes()
+            .iter()
+            .map(|x| x.to_entity())
+            .collect::<Vec<Byte32>>();
+        let hash_stop = self.message.hash_stop().to_entity();
+        let locator_size = block_locator_hashes.len();
+        if locator_size > MAX_LOCATOR_SIZE {
+            return StatusCode::ProtocolMessageIsMalformed.with_context(format!(
+                "Locator count({locator_size}) > MAX_LOCATOR_SIZE({MAX_LOCATOR_SIZE})"
+            ));
+        }
+
+        if active_chain.is_initial_block_download() {
+            info!(
+                "Ignoring getheaders from peer={} because the node is in initial block download stage.",
+                self.peer
+            );
+            self.send_in_ibd();
+            let shared = self.synchronizer.shared();
+            if let Some(flag) = shared.state().peers().get_flag(self.peer)
+                && (flag.is_outbound || flag.is_whitelist || flag.is_protect)
+            {
+                shared.insert_peer_unknown_header_list(self.peer, block_locator_hashes);
+            };
+            return Status::ignored();
+        }
+
+        if let Some(block_number) =
+            active_chain.locate_latest_common_block(&hash_stop, &block_locator_hashes[..])
+        {
+            debug!(
+                "headers latest_common={} tip={} begin",
+                block_number,
+                active_chain.tip_header().number(),
+            );
+
+            self.synchronizer.peers().getheaders_received(self.peer);
+            let headers: Vec<core::HeaderView> =
+                active_chain.get_locator_response(block_number, &hash_stop);
+            // response headers
+
+            debug!("headers len={}", headers.len());
+
+            let content = packed::SendHeaders::new_builder()
+                .headers(headers.into_iter().map(|x| x.data()).collect::<Vec<_>>())
+                .build();
+            let message = packed::SyncMessage::new_builder().set(content).build();
+            let nc = Arc::clone(self.nc);
+            self.synchronizer
+                .shared()
+                .shared()
+                .async_handle()
+                .spawn(async move { async_send_message_to(&nc, self.peer, &message).await });
+        } else {
+            return StatusCode::GetHeadersMissCommonAncestors
+                .with_context(format!("{block_locator_hashes:#x?}"));
+        }
+        Status::ok()
+    }
+
+    fn send_in_ibd(&self) {
+        let content = packed::InIBD::new_builder().build();
+        let message = packed::SyncMessage::new_builder().set(content).build();
+        let nc = Arc::clone(self.nc);
+        let peer = self.peer;
+        self.synchronizer
+            .shared()
+            .shared()
+            .async_handle()
+            .spawn(async move {
+                let _ignore =
+                    async_send_message(SupportProtocols::Sync.protocol_id(), &nc, peer, &message)
+                        .await;
+            });
+    }
+}

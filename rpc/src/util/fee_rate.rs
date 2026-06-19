@@ -1,0 +1,122 @@
+use ckb_jsonrpc_types::FeeRateStatistics;
+use ckb_shared::Snapshot;
+use ckb_store::ChainStore;
+use ckb_types::core::{BlockExt, BlockNumber, FeeRate, tx_pool::get_transaction_weight};
+
+const DEFAULT_TARGET: u64 = 21;
+const MIN_TARGET: u64 = 1;
+const MAX_TARGET: u64 = 101;
+
+fn is_even(n: u64) -> bool {
+    n & 1 == 0
+}
+
+fn mean(numbers: &[u64]) -> u64 {
+    // The average of u64 values fits in u64, but the intermediate sum may not.
+    let sum: u128 = numbers.iter().map(|number| u128::from(*number)).sum();
+    (sum / numbers.len() as u128) as u64
+}
+
+fn median(numbers: &mut [u64]) -> u64 {
+    numbers.sort_unstable();
+    let mid = numbers.len() / 2;
+    if numbers.len().is_multiple_of(2) {
+        mean(&[numbers[mid - 1], numbers[mid]])
+    } else {
+        numbers[mid]
+    }
+}
+
+pub(crate) trait FeeRateProvider {
+    fn get_tip_number(&self) -> BlockNumber;
+    fn get_block_ext_by_number(&self, number: BlockNumber) -> Option<BlockExt>;
+    fn max_target(&self) -> u64;
+
+    fn collect<F>(&self, target: u64, f: F) -> Vec<u64>
+    where
+        F: FnMut(Vec<u64>, BlockExt) -> Vec<u64>,
+    {
+        let tip_number = self.get_tip_number();
+        let start = std::cmp::max(
+            MIN_TARGET,
+            tip_number.saturating_add(1).saturating_sub(target),
+        );
+
+        let block_ext_iter =
+            (start..=tip_number).filter_map(|number| self.get_block_ext_by_number(number));
+        block_ext_iter.fold(Vec::new(), f)
+    }
+}
+
+impl FeeRateProvider for Snapshot {
+    fn get_tip_number(&self) -> BlockNumber {
+        self.tip_number()
+    }
+
+    fn get_block_ext_by_number(&self, number: BlockNumber) -> Option<BlockExt> {
+        self.get_block_hash(number)
+            .and_then(|hash| self.get_block_ext(&hash))
+    }
+
+    fn max_target(&self) -> u64 {
+        MAX_TARGET
+    }
+}
+
+// FeeRateCollector collect fee_rate related information
+pub(crate) struct FeeRateCollector<'a, P> {
+    provider: &'a P,
+}
+
+impl<'a, P> FeeRateCollector<'a, P>
+where
+    P: FeeRateProvider,
+{
+    pub fn new(provider: &'a P) -> Self {
+        FeeRateCollector { provider }
+    }
+
+    pub fn statistics(&self, target: Option<u64>) -> Option<FeeRateStatistics> {
+        let mut target = target.unwrap_or(DEFAULT_TARGET);
+        if is_even(target) {
+            target = target.saturating_add(1);
+        }
+        target = std::cmp::min(self.provider.max_target(), target);
+
+        let mut fee_rates = self.provider.collect(target, |mut fee_rates, block_ext| {
+            let BlockExt {
+                txs_sizes,
+                cycles,
+                txs_fees,
+                ..
+            } = block_ext;
+            let txs_sizes = txs_sizes.expect("expect txs_size's length >= 1");
+            if txs_sizes.len() > 1 && !txs_fees.is_empty() {
+                // block_ext.txs_fees's length == block_ext.cycles's length
+                // block_ext.txs_fees's length + 1 == txs_sizes's length
+                if let Some(cycles) = cycles {
+                    for (fee, cycles, size) in itertools::izip!(
+                        txs_fees,
+                        cycles,
+                        txs_sizes.iter().skip(1) // skip cellbase (first element in the Vec)
+                    ) {
+                        let weight = get_transaction_weight(*size as usize, cycles);
+                        if weight > 0 {
+                            fee_rates.push(FeeRate::calculate(fee, weight).as_u64());
+                        }
+                    }
+                }
+            }
+            fee_rates
+        });
+
+        if fee_rates.is_empty() {
+            None
+        } else {
+            Some(FeeRateStatistics {
+                mean: mean(&fee_rates).into(),
+                median: median(&mut fee_rates).into(),
+            })
+        }
+    }
+}

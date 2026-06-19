@@ -1,0 +1,123 @@
+use crate::util::cell::{as_input, as_inputs, as_output, as_outputs};
+use crate::{Net, Node};
+use ckb_jsonrpc_types::{RawTxPool, TxPoolEntries};
+use ckb_network::SupportProtocols;
+use ckb_types::{
+    bytes::Bytes,
+    core::{TransactionBuilder, TransactionView, cell::CellMeta},
+    packed,
+    prelude::*,
+};
+
+pub fn always_success_transactions(node: &Node, cells: &[CellMeta]) -> Vec<TransactionView> {
+    cells
+        .iter()
+        .map(|cell| always_success_transaction(node, cell))
+        .collect()
+}
+
+pub fn always_success_transaction(node: &Node, cell: &CellMeta) -> TransactionView {
+    TransactionBuilder::default()
+        .input(as_input(cell))
+        .output(as_output(cell))
+        .output_data(Bytes::default())
+        .cell_dep(node.always_success_cell_dep())
+        .build()
+}
+
+pub fn always_success_transactions_with_rand_data(
+    node: &Node,
+    cells: &[CellMeta],
+) -> TransactionView {
+    let len = cells.len();
+    TransactionBuilder::default()
+        .inputs(as_inputs(cells))
+        .outputs(as_outputs(cells))
+        .set_outputs_data(
+            (0..len)
+                .map(|_| {
+                    (0..1600)
+                        .map(|_| rand::random::<u8>())
+                        .collect::<Vec<_>>()
+                        .into()
+                })
+                .collect::<Vec<packed::Bytes>>(),
+        )
+        .cell_dep(node.always_success_cell_dep())
+        .build()
+}
+
+pub fn send_tx(net: &Net, node: &Node, tx: TransactionView, cycles: u64) {
+    let relay_tx = packed::RelayTransaction::new_builder()
+        .cycles(cycles)
+        .transaction(tx.data())
+        .build();
+
+    let tx_msg = packed::RelayMessage::new_builder()
+        .set(
+            packed::RelayTransactions::new_builder()
+                .transactions(
+                    packed::RelayTransactionVec::new_builder()
+                        .set(vec![relay_tx])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    net.send(node, SupportProtocols::RelayV3, tx_msg.as_bytes());
+}
+
+pub fn relay_tx(net: &Net, node: &Node, tx: TransactionView, cycles: u64) {
+    let tx_hash = tx.hash();
+    let tx_hashes_msg = packed::RelayMessage::new_builder()
+        .set(
+            packed::RelayTransactionHashes::new_builder()
+                .tx_hashes(vec![tx_hash.clone()])
+                .build(),
+        )
+        .build();
+    net.send(node, SupportProtocols::RelayV3, tx_hashes_msg.as_bytes());
+
+    let ret = net.should_receive(
+        node,
+        |data: &Bytes| match packed::RelayMessage::from_slice(data).map(|message| message.to_enum())
+        {
+            Ok(packed::RelayMessageUnion::GetRelayTransactions(get_txs)) => {
+                get_txs.tx_hashes().into_iter().any(|hash| hash == tx_hash)
+            }
+            _ => false,
+        },
+    );
+    assert!(ret, "node should ask for tx {tx_hash}");
+
+    let relay_tx = packed::RelayTransaction::new_builder()
+        .cycles(cycles)
+        .transaction(tx.data())
+        .build();
+
+    let tx_msg = packed::RelayMessage::new_builder()
+        .set(
+            packed::RelayTransactions::new_builder()
+                .transactions(
+                    packed::RelayTransactionVec::new_builder()
+                        .set(vec![relay_tx])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    net.send(node, SupportProtocols::RelayV3, tx_msg.as_bytes());
+}
+
+pub fn get_tx_pool_conflicts(node: &Node) -> Vec<ckb_types::H256> {
+    let tx_pool_raw = node.rpc_client().get_raw_tx_pool(Some(true));
+    match tx_pool_raw {
+        RawTxPool::Verbose(TxPoolEntries { mut conflicted, .. }) => {
+            conflicted.sort_unstable();
+            conflicted
+        }
+        _ => {
+            panic!("tx_pool_raw is None");
+        }
+    }
+}

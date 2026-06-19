@@ -1,0 +1,77 @@
+//! Chain iterator utilities.
+//!
+//! This crate provides iterators for traversing the blockchain, allowing efficient
+//! iteration over blocks in the chain.
+use ckb_store::ChainStore;
+use ckb_types::{core::BlockNumber, core::BlockView};
+
+/// An iterator over the blocks in a chain.
+// An iterator over the entries of a `Chain`.
+pub struct ChainIterator<'a, S: ChainStore> {
+    store: &'a S,
+    current: Option<BlockView>,
+    tip: BlockNumber,
+}
+
+impl<'a, S: ChainStore> ChainIterator<'a, S> {
+    /// Creates a new chain iterator starting from the genesis block.
+    pub fn new(store: &'a S) -> Self {
+        let tip = store.get_tip_header().expect("store inited").number();
+        Self::new_with_range(store, 0, tip)
+    }
+
+    /// Create an ChainIterator by range
+    pub fn new_with_range(store: &'a S, start: u64, tip: u64) -> Self {
+        let current = store
+            .get_block_hash(start)
+            .and_then(|h| store.get_block(&h));
+        ChainIterator {
+            store,
+            current,
+            tip,
+        }
+    }
+
+    /// Returns the total number of blocks in the chain.
+    pub fn len(&self) -> u64 {
+        self.tip + 1
+    }
+
+    /// Returns true if the ChainIterator has a length of 0.
+    // we always have genesis, this function may be meaningless
+    // but for convention, mute len-without-is-empty lint
+    pub fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl<'a, S: ChainStore> Iterator for ChainIterator<'a, S> {
+    type Item = BlockView;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current.take();
+
+        self.current = match current {
+            Some(ref b) => {
+                if b.header().number() >= self.tip {
+                    None // Reached the tip, no more blocks to iterate
+                } else if let Some(block_hash) = self.store.get_block_hash(b.header().number() + 1)
+                {
+                    self.store.get_block(&block_hash)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+        current
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self.current {
+            Some(ref b) => (1, Some((self.tip - b.header().number() + 1) as usize)),
+            //The default implementation returns (0, None) which is correct for any iterator.
+            None => (0, None),
+        }
+    }
+}

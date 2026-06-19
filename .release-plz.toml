@@ -1,0 +1,80 @@
+[workspace]
+# Only mark root crate release as latest
+git_release_latest = false
+git_release_draft = true
+git_release_enable = false
+features_always_increment_minor = true
+semver_check = false
+
+[changelog]
+body = """
+
+## [{{ version }}]\
+    {%- if release_link -%}\
+        ({{ release_link }})\
+    {% endif %} \
+    - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+
+    {% for commit in commits %}
+        {%- if commit.scope -%}
+            - *({{commit.scope}})* {% if commit.breaking %}[**breaking**] {% endif %}\
+                {{ commit.message }}{{ self::username(commit=commit) }}\
+                {%- if commit.links %} \
+                    ({% for link in commit.links %}[{{link.text}}]({{link.href}}) {% endfor -%})\
+                {% endif %}
+        {% else -%}
+            - {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message }}{{ self::username(commit=commit) }}
+        {% endif -%}
+    {% endfor -%}
+{% endfor %}
+{%- if remote.contributors %}
+### Contributors
+{% for contributor in remote.contributors %}
+    - @{{ contributor.username }}
+{%- endfor %}
+{% endif -%}
+{%- macro username(commit) -%}
+    {% if commit.remote.username %} (by @{{ commit.remote.username }}){% endif -%}
+{% endmacro -%}
+"""
+
+commit_preprocessors = [
+  { pattern = "^chore: update Cargo.toml dependencies$", replace = "chore: depedencies updated in the workspace root Cargo.toml" },
+  { pattern = "^chore: update Cargo.lock dependencies$", replace = "chore: depedencies updated in the workspace root Cargo.lock" },
+]
+
+commit_parsers = [
+  { field = "author.name", pattern = "\\[bot\\]", skip = true },
+  { message = "^release ", skip = true },
+  { message = "^release$", skip = true },
+  { message = "no-changelog", skip = true },
+  { message = "^ci[:(]", skip = true },
+  { message = "^Merge branch 'develop'", skip = true },
+  { message = "^feat", group = "Added" },
+  { message = "^[aA]dd", group = "Added" },
+  { message = "^[sS]upport", group = "Added" },
+  { message = "^[rR]emove", group = "Removed" },
+  { message = "^[dD]elete", group = "Removed" },
+  { message = "^[dD]precate", group = "Deprecated" },
+  { message = "^[tT]est", group = "Fixed" },
+  { message = "^[fF]ix", group = "Fixed" },
+  { message = "^.*: add", group = "Added" },
+  { message = "^.*: support", group = "Added" },
+  { message = "^.*: remove", group = "Removed" },
+  { message = "^.*: delete", group = "Removed" },
+  { message = "^.*: deprecate", group = "Deprecated" },
+  { message = "^.*: test", group = "Fixed" },
+  { message = "^.*: fix", group = "Fixed" },
+  { message = "[sS]ecurity", group = "Security" },
+  { message = "^.*", group = "Changed" },
+]
+
+[[package]]
+name = "ckb"
+# Root crate will be published manually
+release = false
+publish = false
+git_tag_enable = false
+git_tag_name = "v{{ version }}"

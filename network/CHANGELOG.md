@@ -1,0 +1,71 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.2.2](https://github.com/nervosnetwork/ckb/compare/ckb-network-v1.2.1...ckb-network-v1.2.2) - 2026-06-08
+
+### Changed
+
+- [rust-toolchain] Upgrade Rust toolchain to 1.95.0 (#5175) (by @eval-exec)
+
+### Contributors
+
+- @eval-exec
+
+## [1.2.1](https://github.com/nervosnetwork/ckb/compare/ckb-network-v1.2.0...ckb-network-v1.2.1) - 2026-04-24
+
+### Changed
+
+- upgrade deps (#5132) (by @driftluo)
+
+### Contributors
+
+- @driftluo
+
+## [1.2.0](https://github.com/nervosnetwork/ckb/compare/ckb-network-v1.1.1...ckb-network-v1.2.0) - 2026-03-02
+
+### Added
+
+- support proxy protocol ([#5105](https://github.com/nervosnetwork/ckb/pull/5105)) (by @driftluo)
+- bump crates MSRV to 1.92.0 ([#5076](https://github.com/nervosnetwork/ckb/pull/5076)) (by @doitian)
+
+### Changed
+
+- Upgrade rust-toolchain from 1.85.0 to 1.92.0 ([#4993](https://github.com/nervosnetwork/ckb/pull/4993)) (by @eval-exec)
+
+### Contributors
+
+- @driftluo
+- @doitian
+- @eval-exec
+
+## [1.1.0](https://github.com/nervosnetwork/ckb/compare/ckb-network-v1.0.0...ckb-network-v1.1.0) - 2025-12-10
+
+### Added
+
+- sync use async send
+- relay use async send msg
+- add metrics
+
+### Fixed
+
+- add invalid data test
+
+### Other
+
+- impl review advice
+- Remove `struct NetworkAddresses`
+- Change MultiAddr to Multiaddr
+- Apply code readbility suggestion
+- update network state for public address management
+- update identify protocol for onion address sharing
+- update peer store to handle onion addresses
+- update service builder for proxy support
+- add proxy URL validation and configuration
+- add NetworkAddresses struct for onion addresses
+- improve compress impl

@@ -1,0 +1,7 @@
+[submodule "test/vendor"]
+	path = test/vendor
+	url = https://github.com/nervosnetwork/ckb-tests.git
+	shallow = true
+[submodule "test/obfs4"]
+	path = test/obfs4
+	url = https://github.com/Yawning/obfs4

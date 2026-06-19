@@ -1,0 +1,69 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.1.2](https://github.com/nervosnetwork/ckb/compare/ckb-resource-v1.1.1...ckb-resource-v1.1.2) - 2026-06-08
+
+### Changed
+
+- [rust-toolchain] Upgrade Rust toolchain to 1.95.0 (#5175) (by @eval-exec)
+
+### Contributors
+
+- @eval-exec
+
+## [1.1.1](https://github.com/nervosnetwork/ckb/compare/ckb-resource-v1.1.0...ckb-resource-v1.1.1) - 2026-04-24
+
+### Changed
+
+- update testnet bootnodes (#5176) (by @jiangxianliang007)
+- sort WalkDir entries in resource bundling (#5156) (by @eval-exec)
+
+### Contributors
+
+- @jiangxianliang007
+- @eval-exec
+
+## [1.1.0](https://github.com/nervosnetwork/ckb/compare/ckb-resource-v1.0.2...ckb-resource-v1.1.0) - 2026-03-02
+
+### Added
+
+- add Terminal module for CKB-TUI data provision ([#4989](https://github.com/nervosnetwork/ckb/pull/4989)) (by @zhangsoledad)
+- support proxy protocol ([#5105](https://github.com/nervosnetwork/ckb/pull/5105)) (by @driftluo)
+- bump crates MSRV to 1.92.0 ([#5076](https://github.com/nervosnetwork/ckb/pull/5076)) (by @doitian)
+
+### Changed
+
+- Upgrade rust-toolchain from 1.85.0 to 1.92.0 ([#4993](https://github.com/nervosnetwork/ckb/pull/4993)) (by @eval-exec)
+
+### Contributors
+
+- @zhangsoledad
+- @driftluo
+- @doitian
+- @eval-exec
+
+## [1.0.2](https://github.com/nervosnetwork/ckb/compare/ckb-resource-v1.0.1...ckb-resource-v1.0.2) - 2025-12-18
+
+### Added
+
+- Add default promethues server config (by @eval-exec) - #5035
+
+### Contributors
+
+* @eval-exec
+
+## [1.0.1](https://github.com/nervosnetwork/ckb/compare/ckb-resource-v1.0.0...ckb-resource-v1.0.1) - 2025-12-10
+
+### Other
+
+- reword [network.onion] comment
+- support config onion service port by `onion_external_port`
+- move `[network.proxy]` onion insturction to `[network.onion]`
+- Change MultiAddr to Multiaddr
+- add onion service configuration options
